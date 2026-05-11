@@ -105,9 +105,17 @@ class WarehouseGraph:
         return docks
 
     def distance(self, a: tuple[int, int], b: tuple[int, int]) -> float:
-        """Quick shortest distance between two nodes using Dijkstra."""
+        """Quick shortest distance between two nodes using Dijkstra. Handles non-walkable cell resolution."""
         from algorithms.dijkstra import dijkstra
-        result = dijkstra(self.adjacency, a, b)
+        
+        # Resolve potentially non-walkable coordinates to nearest access points
+        node_a = self.get_location_for_cell(a[0], a[1])
+        node_b = self.get_location_for_cell(b[0], b[1])
+        
+        if not node_a or not node_b:
+            return float("inf")
+            
+        result = dijkstra(self.adjacency, node_a, node_b)
         return result["distance"]
 
     def to_serializable(self) -> dict:
