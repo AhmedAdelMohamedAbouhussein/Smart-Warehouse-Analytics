@@ -37,13 +37,18 @@ def dijkstra(
     if source == target:
         return {"path": [source], "distance": 0.0, "explored": [source], "explored_edges": []}
 
-    # Distance from source to each node
+    # --- INITIALIZATION ---
+    # dist: keeps track of the shortest distance from the source to every other node
     dist = {source: 0.0}
-    # Previous node in shortest path
+    
+    # prev: keeps track of the 'parent' node so we can trace the path back later
     prev = {source: None}
-    # Min-heap: (distance, node)
+    
+    # Min-heap: This is our 'Priority Queue'. It ensures we always process 
+    # the node that is currently closest to the starting point.
     heap = [(0.0, source)]
-    # Track exploration order for visualization
+    
+    # Track exploration for the 2D floor map visualization
     explored_order = []
     explored_edges = []
     visited = set()
@@ -77,14 +82,15 @@ def dijkstra(
                 heapq.heappush(heap, (new_dist, neighbor))
                 explored_edges.append((current, neighbor))
 
-    # Reconstruct path
+    # --- PATH RECONSTRUCTION ---
+    # We start at the target and "walk back" to the source using our 'prev' map
     path = []
     node = target
     if target in prev or target == source:
         while node is not None:
             path.append(node)
             node = prev.get(node)
-        path.reverse()
+        path.reverse() # Flip it so it goes from Source -> Target
 
     return {
         "path": path,

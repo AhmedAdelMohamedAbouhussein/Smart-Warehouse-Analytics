@@ -29,15 +29,16 @@ def abc_classify(products: list[dict]) -> dict[str, list[dict]]:
     if not products:
         return {"A": [], "B": [], "C": [], "classification_details": []}
 
-    # Step 1: Sort products by demand frequency descending
-    # High-demand items go to the top of the list for Priority assignment
+    # --- STEP 1: RANK-BASED SORTING ---
+    # We sort products by demand frequency (popularity) in descending order.
+    # The most popular items (High Velocity) go to the top of the list.
     sorted_products = sorted(products, key=lambda p: p.get("demand_frequency", 0), reverse=True)
     n = len(sorted_products)
 
-    # Step 2: Define split points for the 20/30/50 rule
-    # Class A: Top 20% of products (High Velocity)
+    # --- STEP 2: CALCULATE SPLIT POINTS (20/30/50 Rule) ---
+    # Class A: Top 20% of products (High Velocity - The "Rockstars")
     # Class B: Next 30% of products (Medium Velocity)
-    # Class C: Remaining 50% of products (Low Velocity)
+    # Class C: Remaining 50% of products (Low Velocity - Slow Movers)
     a_count = max(1, int(n * 0.2))
     b_count = max(1, int(n * 0.3))
 
@@ -103,7 +104,9 @@ def first_fit_decreasing(
             "steps": [{action, item_id, bin_id, ...}, ...]  # For visualization
         }
     """
-    # Sort items by volume descending (FFD strategy)
+    # --- STEP 1: SORT ITEMS BY VOLUME (DECREASING) ---
+    # This is the "Decreasing" part of First-Fit Decreasing (FFD).
+    # We pack the biggest items first to ensure they don't get stuck at the end.
     sorted_items = sorted(items, key=lambda x: x.get("volume", 0), reverse=True)
 
     # Track bin remaining capacity

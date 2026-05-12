@@ -12,7 +12,8 @@ def assign_order_greedy(order: dict, pickers: list[dict], distance_func, ignore_
     Assign an order to the nearest available (idle) picker.
     If ignore_busy is True, considers all pickers regardless of status.
     """
-    # Get first pick location from order
+    # --- STEP 1: GET THE FIRST PICK LOCATION ---
+    # We always assign based on where the picker needs to go FIRST.
     pick_locations = []
     for item in order.get("items", []):
         loc = item.get("shelf_location")
@@ -22,6 +23,7 @@ def assign_order_greedy(order: dict, pickers: list[dict], distance_func, ignore_
     if not pick_locations:
         return {"assigned_picker_id": None, "distance_to_first_item": 0, "picker_distances": [], "assignment_reason": "No pick locations"}
 
+    # The target for our distance calculation
     first_location = pick_locations[0]
 
     # Calculate distance from each picker to the first pick location
@@ -63,6 +65,8 @@ def assign_order_greedy(order: dict, pickers: list[dict], distance_func, ignore_
             "position": pos,
         })
 
+        # --- STEP 4: UPDATE THE BEST CANDIDATE ---
+        # We compare the distance of the current picker against the best one we've found so far
         if is_available and dist < best_distance:
             best_distance = dist
             best_picker_id = picker["id"]
