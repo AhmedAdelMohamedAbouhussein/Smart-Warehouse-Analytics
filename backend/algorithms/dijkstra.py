@@ -49,22 +49,28 @@ def dijkstra(
     visited = set()
 
     while heap:
+        # Step 1: Pop the node with the smallest known distance
         current_dist, current = heapq.heappop(heap)
 
+        # Skip if we already found a shorter path to this node
         if current in visited:
             continue
         visited.add(current)
         explored_order.append(current)
 
-        # Early exit if we reached the target
+        # Step 2: Early exit if we reached the target
         if current == target:
             break
 
-        # Explore neighbors
+        # Step 3: Explore all neighbors of the current node
         for neighbor, weight in graph.get(current, []):
             if neighbor in visited:
                 continue
+            
+            # Calculate distance to neighbor through the current node
             new_dist = current_dist + weight
+            
+            # If this path is shorter than any previously known path, update it
             if new_dist < dist.get(neighbor, float("inf")):
                 dist[neighbor] = new_dist
                 prev[neighbor] = current
@@ -241,7 +247,12 @@ def compute_distance_matrix(
         n×n distance matrix where matrix[i][j] = shortest distance from locations[i] to locations[j]
     """
     n = len(locations)
-    matrix = [[float("inf")] * n for _ in range(n)]
+    matrix = []
+    for _ in range(n):
+        row = []
+        for _ in range(n):
+            row.append(float("inf"))
+        matrix.append(row)
 
     for i in range(n):
         for j in range(n):

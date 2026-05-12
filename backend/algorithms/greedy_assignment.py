@@ -31,17 +31,34 @@ def assign_order_greedy(order: dict, pickers: list[dict], distance_func, ignore_
 
     for picker in pickers:
         # Support both dict and object access
-        status = picker.get("status") if isinstance(picker, dict) else getattr(picker, "status", None)
-        is_available = status == "idle" or ignore_busy
-        
-        raw_pos = picker.get("current_position", (0, 0)) if isinstance(picker, dict) else getattr(picker, "current_position", (0, 0))
+        if isinstance(picker, dict):
+            status = picker.get("status")
+            raw_pos = picker.get("current_position", (0, 0))
+        else:
+            status = getattr(picker, "status", None)
+            raw_pos = getattr(picker, "current_position", (0, 0))
+            
+        # Step 2: Decide if picker is available
+        # They must be in 'idle' status, unless we are in a demo mode that ignores status
+        is_available = (status == "idle" or ignore_busy)
         pos = tuple(raw_pos)
-        dist = distance_func(pos, first_location) if is_available else float("inf")
+
+        # Step 3: Calculate distance from picker's current position to the item
+        if is_available:
+            dist = distance_func(pos, first_location)
+        else:
+            # If busy, we treat them as infinitely far away so they aren't picked
+            dist = float("inf")
+
+        if dist != float("inf"):
+            rounded_dist = round(dist, 2)
+        else:
+            rounded_dist = None
 
         picker_distances.append({
             "picker_id": picker["id"],
             "picker_name": picker.get("name", f"Picker {picker['id']}"),
-            "distance": round(dist, 2) if dist != float("inf") else None,
+            "distance": rounded_dist,
             "available": is_available,
             "position": pos,
         })
@@ -50,13 +67,22 @@ def assign_order_greedy(order: dict, pickers: list[dict], distance_func, ignore_
             best_distance = dist
             best_picker_id = picker["id"]
 
-    reason = "No pickers in system" if best_picker_id is None else f"Nearest idle picker (distance: {best_distance:.1f})"
+    if best_picker_id is None:
+        reason = "No pickers in system"
+    else:
+        reason = f"Nearest idle picker (distance: {best_distance:.1f})"
+
     if ignore_busy and best_picker_id is not None:
         reason = f"Closest Picker (Lab Demo): {best_distance:.1f}m"
 
+    if best_distance != float("inf"):
+        final_dist = round(best_distance, 2)
+    else:
+        final_dist = None
+
     return {
         "assigned_picker_id": best_picker_id,
-        "distance_to_first_item": round(best_distance, 2) if best_distance != float("inf") else None,
+        "distance_to_first_item": final_dist,
         "picker_distances": picker_distances,
         "assignment_reason": reason,
     }
@@ -80,12 +106,22 @@ def calculate_picker_metrics(pickers: list[dict], completed_orders: list[dict]) 
         idle_t = picker.get("total_idle_time", 0)
         active_t = picker.get("total_active_time", 0)
         total_t = idle_t + active_t
-        utilization = (active_t / total_t * 100) if total_t > 0 else 0.0
+        if total_t > 0:
+            utilization = (active_t / total_t * 100)
+        else:
+            utilization = 0.0
 
         # Orders completed by this picker
-        picker_orders = [o for o in completed_orders if o.get("assigned_picker_id") == pid]
+        picker_orders = []
+        for o in completed_orders:
+            if o.get("assigned_picker_id") == pid:
+                picker_orders.append(o)
+        
         total_dist = picker.get("total_distance_traveled", 0)
-        avg_dist = total_dist / len(picker_orders) if picker_orders else 0
+        if picker_orders:
+            avg_dist = total_dist / len(picker_orders)
+        else:
+            avg_dist = 0
 
         per_picker.append({
             "id": pid,
@@ -105,12 +141,30 @@ def calculate_picker_metrics(pickers: list[dict], completed_orders: list[dict]) 
         if ct > 0:
             cycle_times.append(ct)
 
-    return {
+    if pickers:
+        avg_util = round(total_util / len(pickers), 1)
+    else:
+        avg_util = 0
+
+    if cycle_times:
+        avg_cycle = round(sum(cycle_times) / len(cycle_times), 2)
+    else:
+        avg_cycle = 0
+
+    result = {
         "per_picker": per_picker,
         "overall": {
-            "avg_utilization": round(total_util / len(pickers), 1) if pickers else 0,
+            "avg_utilization": avg_util,
             "total_orders_completed": len(completed_orders),
-            "avg_cycle_time": round(sum(cycle_times) / len(cycle_times), 2) if cycle_times else 0,
-            "total_distance": round(sum(p.get("total_distance_traveled", 0) for p in pickers), 1),
+            "avg_cycle_time": avg_cycle,
+            "total_distance": 0.0,
         },
     }
+    
+    # Calculate total distance separately to avoid generator expression
+    total_dist_all = 0.0
+    for p in pickers:
+        total_dist_all += p.get("total_distance_traveled", 0)
+    
+    result["overall"]["total_distance"] = round(total_dist_all, 1)
+    return result

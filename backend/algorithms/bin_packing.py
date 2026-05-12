@@ -20,68 +20,59 @@ import config
 
 def abc_classify(products: list[dict]) -> dict[str, list[dict]]:
     """
-    Classify products into A/B/C categories based on demand frequency.
+    Classify products into A/B/C categories based on rank (position in sorted list).
 
-    - A (top 20% of cumulative demand): High velocity, place near stations
-    - B (next 30%): Medium velocity, mid-range zones
-    - C (bottom 50%): Low velocity, far zones
-
-    Args:
-        products: List of product dicts with 'id', 'demand_frequency', etc.
-
-    Returns:
-        {
-            "A": [products...],
-            "B": [products...],
-            "C": [products...],
-            "classification_details": [{id, demand_frequency, cumulative_pct, class}, ...]
-        }
+    - Class A → top 20% of products (highest demand)
+    - Class B → next 30% of products
+    - Class C → remaining 50% of products
     """
     if not products:
         return {"A": [], "B": [], "C": [], "classification_details": []}
 
-    # Sort by demand frequency descending
+    # Step 1: Sort products by demand frequency descending
+    # High-demand items go to the top of the list for Priority assignment
     sorted_products = sorted(products, key=lambda p: p.get("demand_frequency", 0), reverse=True)
+    n = len(sorted_products)
 
-    total_demand = sum(p.get("demand_frequency", 0) for p in sorted_products)
-    if total_demand == 0:
-        # All equal frequency → distribute evenly
-        n = len(sorted_products)
-        a_cut = max(1, int(n * 0.2))
-        b_cut = max(a_cut + 1, int(n * 0.5))
-        return {
-            "A": sorted_products[:a_cut],
-            "B": sorted_products[a_cut:b_cut],
-            "C": sorted_products[b_cut:],
-            "classification_details": [
-                {**p, "cumulative_pct": 0, "velocity_class": "A" if i < a_cut else "B" if i < b_cut else "C"}
-                for i, p in enumerate(sorted_products)
-            ],
-        }
+    # Step 2: Define split points for the 20/30/50 rule
+    # Class A: Top 20% of products (High Velocity)
+    # Class B: Next 30% of products (Medium Velocity)
+    # Class C: Remaining 50% of products (Low Velocity)
+    a_count = max(1, int(n * 0.2))
+    b_count = max(1, int(n * 0.3))
 
-    # Calculate cumulative percentage and classify
+    # Boundary handling for small lists
+    if a_count >= n:
+        a_count = n
+        b_count = 0
+    elif a_count + b_count > n:
+        b_count = n - a_count
+
+    a_end = a_count
+    b_end = a_count + b_count
+
     result = {"A": [], "B": [], "C": [], "classification_details": []}
-    cumulative = 0.0
 
-    for product in sorted_products:
-        freq = product.get("demand_frequency", 0)
-        cumulative += freq
-        cum_pct = cumulative / total_demand
-
-        if cum_pct <= config.ABC_A_THRESHOLD:
+    for i in range(n):
+        product = sorted_products[i]
+        if i < a_end:
             velocity_class = "A"
-        elif cum_pct <= config.ABC_B_THRESHOLD:
+        elif i < b_end:
             velocity_class = "B"
         else:
             velocity_class = "C"
 
-        classified_product = {**product, "velocity_class": velocity_class}
+        # Create classified version
+        classified_product = product.copy()
+        classified_product["velocity_class"] = velocity_class
+        
         result[velocity_class].append(classified_product)
+
+        # Build flat details list
         result["classification_details"].append({
             "id": product.get("id"),
             "name": product.get("name", ""),
-            "demand_frequency": freq,
-            "cumulative_pct": round(cum_pct * 100, 2),
+            "demand_frequency": product.get("demand_frequency", 0),
             "velocity_class": velocity_class,
         })
 
@@ -116,8 +107,12 @@ def first_fit_decreasing(
     sorted_items = sorted(items, key=lambda x: x.get("volume", 0), reverse=True)
 
     # Track bin remaining capacity
-    bin_remaining = {b["id"]: b.get("capacity", config.SHELF_CAPACITY) for b in bins}
-    bin_capacity = {b["id"]: b.get("capacity", config.SHELF_CAPACITY) for b in bins}
+    capacities = {}
+    for b in bins:
+        capacities[b["id"]] = b.get("capacity", config.SHELF_CAPACITY)
+
+    bin_capacity = capacities.copy()
+    bin_remaining = capacities.copy()
 
     placements = {}
     unplaced = []
@@ -128,7 +123,8 @@ def first_fit_decreasing(
         item_volume = item.get("volume", 1.0)
         placed = False
 
-        # Try each bin in order (first fit)
+        # Step 2: Try each bin in order (First Fit)
+        # We pick the very first bin that can fit the item's volume
         for b in bins:
             bin_id = b["id"]
             if bin_remaining[bin_id] >= item_volume:
@@ -171,14 +167,31 @@ def first_fit_decreasing(
         bid = b["id"]
         cap = bin_capacity[bid]
         used = cap - bin_remaining[bid]
+        
+        if cap > 0:
+            util_pct = round((used / cap) * 100, 2)
+        else:
+            util_pct = 0
+            
         bin_utilization[bid] = {
             "capacity": cap,
             "used": round(used, 2),
-            "utilization_pct": round((used / cap) * 100, 2) if cap > 0 else 0,
+            "utilization_pct": util_pct,
         }
 
-    used_bins = [bu for bid, bu in bin_utilization.items() if bu["used"] > 0]
-    avg_util = sum(bu["utilization_pct"] for bu in used_bins) / len(used_bins) if used_bins else 0
+    used_bins = []
+    for bid, bu in bin_utilization.items():
+        if bu["used"] > 0:
+            used_bins.append(bu)
+
+    total_util = 0.0
+    for bu in used_bins:
+        total_util += bu["utilization_pct"]
+    
+    if used_bins:
+        avg_util = total_util / len(used_bins)
+    else:
+        avg_util = 0
 
     return {
         "placements": placements,
